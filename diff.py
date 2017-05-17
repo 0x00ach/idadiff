@@ -55,44 +55,69 @@ def calc_hash(funcAddr):
     m2.update(cur_hash_rev)
     iHash = m2.hexdigest()[-8:]
     return iHash
-
-def sample_source():
-	full_hash = ""
-	for addr in idautils.Functions(idc.MinEA(),idc.MaxEA()):
-			fname = idc.GetFunctionName(addr)
-			full_hash = fname+":"+calc_hash(addr)+":"+hex(addr)[2:]+"|"
-	print 'x = "' + full_hash + '"'
-   
-def sample_dest():
-	global x
-	src_hashes = {}
-	for i in x.split("|"):
-		z = i.split(":")
-		if src_hashes.has_key(z):
-			src_hashes[z] = "baadf00d"
+	
+def normalize_fname(fname):
+	newname = ''
+	allowed = 'azertyuiopqsdfghjklmwxcvbnAZERTYUIOPQSDFGHJKLMWXCVBN0123456789_-'
+	for c in fname:
+		if c in allowed:
+			newname += c
 		else:
-			src_hashes[i[1]] = i[0]
+			newname += '_'
+	return newname
+	
+def sample_source():
+	global full_hash
+	full_hash = ""
+	c = 0
+	for addr in idautils.Functions(idc.MinEA(),idc.MaxEA()):
+		fname = idc.GetFunctionName(addr)
+		full_hash += normalize_fname(fname)+":"+calc_hash(addr)+":"+shexst(addr)+"|"
+		c = c+1
+	if c > 1000:
+		print "Too many subs. Plz run:"
+		print "SRC SAMPLE : open('lame_ipc.txt','wb').write(full_hash)"
+		print "DST SAMPLE : src_data = open('lame_ipc.txt','rb').read(full_hash)"
+	else:
+		print 'src_data = "' + full_hash + '"'
+	return
+	
+def sample_dest():
+	global src_data
+	if src_data is None:
+		print "run the src_data = ... first"
+		return
+	src_hashes = {}
+	for i in src_data.split("|"):
+		z = i.split(":")
+		if len(z) < 2:
+			continue
+		if src_hashes.has_key(z[1]):
+			src_hashes[z[1]] = "baadf00d"
+		else:
+			src_hashes[z[1]] = z[0]
 	dst_hashes = {}
 	for addr in idautils.Functions(idc.MinEA(),idc.MaxEA()):
 			fname = idc.GetFunctionName(addr)
-			if fname.startswith("sub_"):
-				z = calc_hash(addr)
-				if dst_hashes.has_key(z):
-					src_hashes[z] = "baadf00d"
-				else:
-					src_hashes[z] = addr
-	for x in dst_hashes:
-		if dst_hashes[x] == "baadf00d":
+			z = calc_hash(addr)
+			if dst_hashes.has_key(z):
+				dst_hashes[z] = "baadf00d"
+			else:
+				dst_hashes[z] = addr
+	c = 0
+	for tmp in dst_hashes:
+		if dst_hashes[tmp] == "baadf00d":
 			continue
-		if src_hashes.has_key(x):
-			if src_hashes[x] != "baadf00d":
-				idc.MakeNameEx(dst_hashes[x],src_hashes[x], SN_NOWARN)
-	print full_hash
-  
+		if src_hashes.has_key(tmp):
+			if src_hashes[tmp] != "baadf00d":
+				idc.MakeNameEx(dst_hashes[tmp],"SHARED_"+src_hashes[tmp], SN_NOWARN)
+				c = c+1
+	print "%d subs have been renamed" % (c)
+	return
 def help():
    print "1. In the source sample (renamed subs), run 'sample_source()'"
-   print "2. Copy the x = 'XXXXX...XXXX' string"
-   print "3. In the dest sample, paste the string"
+   print '2. Copy the src_data = "XXXXX...XXXX" string (if too long, will be in the "full_hash" global => store it into a file)'
+   print "3. In the dest sample, paste it (or read the file and store it in the src_data global)"
    print "4. In the dest sample, load the script and run 'sample_dest()'"
    
 help()
